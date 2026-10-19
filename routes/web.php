@@ -1,10 +1,17 @@
 <?php
 
 use App\Http\Controllers\ProfileController;
+use App\Models\Module;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
-    return view('welcome');
+    $modules = Module::with(['courseClass', 'courseClass.dosen'])
+        ->where('status', 'approved')
+        ->where('is_locked', false)
+        ->latest()
+        ->get();
+
+    return view('welcome', compact('modules'));
 });
 
 Route::get('/dashboard', function () {
