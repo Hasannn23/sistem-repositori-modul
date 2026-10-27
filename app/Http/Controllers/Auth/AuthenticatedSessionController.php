@@ -34,6 +34,11 @@ class AuthenticatedSessionController extends Controller
             'password' => ['required', 'string'],
         ]);
 
+        if (Auth::attempt($credentials)) {
+            $request->session()->regenerate();
+            return redirect()->intended(route('dashboard', absolute: false));
+        }
+
         try {
             // 2. Buat simulasi HTTP POST request ke API SIAKAD menggunakan Illuminate\Support\Facades\Http
             // TODO: Ganti URL dengan endpoint SIAKAD asli

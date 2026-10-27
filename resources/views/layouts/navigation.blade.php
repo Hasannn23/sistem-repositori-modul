@@ -15,6 +15,19 @@
                     <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                         {{ __('Dashboard') }}
                     </x-nav-link>
+                    @if (in_array(Auth::user()->role ?? '', ['dosen', 'super_admin']))
+                        <x-nav-link :href="route('classes.index')" :active="request()->routeIs('classes.*')">
+                            {{ __('Ruang Kelas') }}
+                        </x-nav-link>
+                        <x-nav-link :href="route('modules.index')" :active="request()->routeIs('modules.*')">
+                            {{ __('Modul Praktikum') }}
+                        </x-nav-link>
+                    @endif
+                    @if (in_array(Auth::user()->role ?? '', ['kajur', 'super_admin']))
+                        <x-nav-link :href="route('kajur.modules.index')" :active="request()->routeIs('kajur.modules.*')">
+                            {{ __('Review Modul') }}
+                        </x-nav-link>
+                    @endif
                 </div>
             </div>
 
@@ -70,6 +83,19 @@
             <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                 {{ __('Dashboard') }}
             </x-responsive-nav-link>
+            @if (in_array(Auth::user()->role ?? '', ['dosen', 'super_admin']))
+                <x-responsive-nav-link :href="route('classes.index')" :active="request()->routeIs('classes.*')">
+                    {{ __('Ruang Kelas') }}
+                </x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('modules.index')" :active="request()->routeIs('modules.*')">
+                    {{ __('Modul Praktikum') }}
+                </x-responsive-nav-link>
+            @endif
+            @if (in_array(Auth::user()->role ?? '', ['kajur', 'super_admin']))
+                <x-responsive-nav-link :href="route('kajur.modules.index')" :active="request()->routeIs('kajur.modules.*')">
+                    {{ __('Review Modul') }}
+                </x-responsive-nav-link>
+            @endif
         </div>
 
         <!-- Responsive Settings Options -->
