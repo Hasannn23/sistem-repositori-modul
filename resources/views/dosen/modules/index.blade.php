@@ -38,7 +38,21 @@
         </div>
     </x-slot>
 
-    <div class="py-10">
+    <div class="py-10" x-data="{
+        revisionModuleId: null,
+        revisionModuleTitle: '',
+        revisionKajurNotes: '',
+        revisionFileType: 'pdf',
+        revisionLinkUrl: '',
+        openRevisionModal(id, title, notes, type, url) {
+            this.revisionModuleId = id;
+            this.revisionModuleTitle = title;
+            this.revisionKajurNotes = notes;
+            this.revisionFileType = type || 'pdf';
+            this.revisionLinkUrl = url || '';
+            $dispatch('open-modal', 'revise-module');
+        }
+    }">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
 
             <!-- Flash Notifications -->
@@ -127,16 +141,130 @@
                 </div>
             @else
                 <div class="bg-white rounded-2xl border border-gray-100 shadow-xs overflow-hidden">
-                    <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                        <h3 class="font-bold text-base text-gray-900">
-                            Daftar Modul ({{ $modules->count() }})
-                        </h3>
-                        <span class="text-xs text-gray-500">
-                            Format PDF • Maksimal 5MB
-                        </span>
+                    <div class="px-6 py-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                            <h3 class="font-bold text-base text-gray-900">
+                                Daftar Modul ({{ $modules->total() }})
+                            </h3>
+                            <span class="text-xs text-gray-500">
+                                Berkas PDF atau Tautan Dokumen (Google Drive/URL)
+                            </span>
+                        </div>
+                        
+                        <!-- Search input -->
+                        <form method="GET" action="{{ route('modules.index') }}" class="flex items-center gap-2">
+                            @if ($selectedClass)
+                                <input type="hidden" name="class_id" value="{{ $selectedClass->id }}">
+                            @endif
+                            <div class="relative">
+                                <input 
+                                    type="text" 
+                                    name="search" 
+                                    value="{{ request('search') }}" 
+                                    placeholder="Cari judul modul..." 
+                                    class="text-xs rounded-xl border-gray-300 py-1.5 pl-8 pr-3 focus:border-emerald-500 focus:ring-emerald-500 placeholder-gray-400"
+                                />
+                                <div class="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-gray-400">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                                    </svg>
+                                </div>
+                            </div>
+                            @if(request('search'))
+                                <a href="{{ route('modules.index', $selectedClass ? ['class_id' => $selectedClass->id] : []) }}" class="p-1.5 text-xs text-gray-400 hover:text-gray-600 rounded-lg" title="Reset">
+                                    ✕
+                                </a>
+                            @endif
+                        </form>
                     </div>
 
-                    <div class="overflow-x-auto">
+                    <div class="overflow-hidden">
+                        {{-- Mobile Card View --}}
+                        <div class="block lg:hidden divide-y divide-gray-100">
+                            @foreach ($modules as $module)
+                                @php
+                                    $isLink = $module->storage_type === 'gdrive' || str_starts_with($module->file_path, 'http');
+                                @endphp
+                                <div class="p-4 hover:bg-gray-50/60 transition-colors">
+                                    <div class="flex items-start justify-between gap-3">
+                                        <div class="flex items-start gap-2.5 min-w-0">
+                                            <div class="w-8 h-8 rounded-lg {{ $isLink ? 'bg-blue-50 text-blue-600' : 'bg-red-50 text-red-600' }} flex items-center justify-center shrink-0 mt-0.5">
+                                                @if ($isLink)
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
+                                                @else
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+                                                @endif
+                                            </div>
+                                            <div class="min-w-0 flex-1">
+                                                <span class="font-bold text-gray-900 block leading-tight text-sm">{{ $module->title }}</span>
+                                                @if (!$selectedClass)
+                                                    <span class="text-xs text-gray-500 block mt-0.5">{{ $module->courseClass->name ?? '-' }}</span>
+                                                @endif
+                                                <div class="flex flex-wrap items-center gap-1.5 mt-1">
+                                                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase {{ $isLink ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-red-50 text-red-700 border border-red-200' }}">{{ $isLink ? 'LINK' : 'PDF' }}</span>
+                                                    @if ($module->status === 'approved')
+                                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800">● Disetujui</span>
+                                                    @elseif ($module->status === 'waiting_review')
+                                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">● Menunggu Review</span>
+                                                    @elseif ($module->status === 'revision')
+                                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800">● Perlu Revisi</span>
+                                                    @else
+                                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800">● Draft</span>
+                                                    @endif
+                                                    @if ($module->is_locked)
+                                                        <span class="text-xs text-gray-500">🔒 Terkunci</span>
+                                                    @else
+                                                        <span class="text-xs text-emerald-600">🔓 Terbuka</span>
+                                                    @endif
+                                                </div>
+                                                @if ($module->status == 'revision' && $module->kajur_notes)
+                                                    <div class="mt-1.5 p-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800">
+                                                        <strong>Catatan Kajur:</strong> {{ Str::limit($module->kajur_notes, 80) }}
+                                                    </div>
+                                                @endif
+                                                <span class="text-[11px] text-gray-400 mt-1 block">{{ $module->created_at->format('d M Y, H:i') }}</span>
+                                            </div>
+                                        </div>
+                                        <div class="flex flex-col items-end gap-1.5 shrink-0">
+                                            @if ($module->status === 'draft')
+                                                <form method="POST" action="{{ route('modules.submit', $module->id) }}" class="inline">
+                                                    @csrf
+                                                    <button type="submit" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition">
+                                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                                        Ajukan
+                                                    </button>
+                                                </form>
+                                            @elseif ($module->status === 'revision')
+                                                <button
+                                                    type="button"
+                                                    x-data=""
+                                                    x-on:click.prevent="$dispatch('open-modal', 'revise-module-{{ $module->id }}')"
+                                                    class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold shadow-xs transition"
+                                                    title="Upload Perbaikan">
+                                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                                    <span>Perbaiki</span>
+                                                </button>
+                                            @endif
+                                            <div class="flex items-center gap-1">
+                                                <a href="{{ route('modules.show', $module->id) }}" target="_blank" class="p-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition" title="{{ $isLink ? 'Buka Link' : 'Lihat PDF' }}">
+                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                                                </a>
+                                                <form method="POST" action="{{ route('modules.destroy', $module->id) }}" onsubmit="return confirm('Hapus modul ini?');" class="inline">
+                                                    @csrf
+                                                    @method('DELETE')
+                                                    <button type="submit" class="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition">
+                                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+
+                        {{-- Desktop Table View --}}
+                        <div class="hidden lg:block overflow-x-auto">
                         <table class="w-full text-left border-collapse">
                             <thead>
                                 <tr class="bg-gray-50/70 border-b border-gray-100 text-xs font-semibold text-gray-500 uppercase tracking-wider">
@@ -152,21 +280,32 @@
                             </thead>
                             <tbody class="divide-y divide-gray-100 text-sm">
                                 @foreach ($modules as $module)
+                                    @php
+                                        $isLink = $module->storage_type === 'gdrive' || str_starts_with($module->file_path, 'http');
+                                    @endphp
                                     <tr class="hover:bg-gray-50/60 transition-colors">
                                         <!-- Judul Modul & File Icon -->
                                         <td class="py-4 px-6">
                                             <div class="flex items-start gap-3">
-                                                <div class="w-9 h-9 rounded-lg bg-red-50 text-red-600 flex items-center justify-center shrink-0 mt-0.5">
-                                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
-                                                    </svg>
-                                                </div>
+                                                @if ($isLink)
+                                                    <div class="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 mt-0.5">
+                                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
+                                                        </svg>
+                                                    </div>
+                                                @else
+                                                    <div class="w-9 h-9 rounded-lg bg-red-50 text-red-600 flex items-center justify-center shrink-0 mt-0.5">
+                                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                                                        </svg>
+                                                    </div>
+                                                @endif
                                                 <div class="min-w-0 flex-1">
                                                     <span class="font-bold text-gray-900 block leading-tight">
                                                         {{ $module->title }}
                                                     </span>
-                                                    <span class="text-xs text-gray-400 font-mono mt-0.5 block truncate max-w-xs">
-                                                        {{ basename($module->file_path) }}
+                                                    <span class="text-xs text-gray-400 font-mono mt-0.5 block truncate max-w-xs" title="{{ $module->file_path }}">
+                                                        {{ $isLink ? $module->file_path : basename($module->file_path) }}
                                                     </span>
 
                                                     <!-- Catatan Revisi Kajur -->
@@ -196,9 +335,18 @@
                                         <!-- Tipe & Status -->
                                         <td class="py-4 px-6">
                                             <div class="flex flex-col gap-1.5 items-start">
-                                                <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-gray-100 text-gray-700">
-                                                    {{ strtoupper($module->storage_type) }}
-                                                </span>
+                                                @if ($isLink)
+                                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200">
+                                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
+                                                        </svg>
+                                                        LINK
+                                                    </span>
+                                                @else
+                                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-red-50 text-red-700 border border-red-200">
+                                                        PDF
+                                                    </span>
+                                                @endif
 
                                                 @if ($module->status === 'approved')
                                                     <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800 border border-green-200">
@@ -262,30 +410,35 @@
                                                         </button>
                                                     </form>
                                                 @elseif ($module->status === 'revision')
-                                                    <!-- Form Upload Perbaikan Revisi -->
-                                                    <form method="POST" action="{{ route('modules.updateRevision', $module->id) }}" enctype="multipart/form-data" class="inline-flex items-center gap-2">
-                                                        @csrf
-                                                        <input type="file" name="file" accept=".pdf" required class="text-xs text-gray-500 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100 cursor-pointer max-w-[200px]">
-                                                        <button
-                                                            type="submit"
-                                                            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white text-xs font-semibold shadow-xs transition"
-                                                            title="Upload Perbaikan">
-                                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
-                                                            </svg>
-                                                            <span>Upload Perbaikan</span>
-                                                        </button>
-                                                    </form>
+                                                    <!-- Tombol Perbaiki Revisi (Buka Modal) -->
+                                                    <button
+                                                        type="button"
+                                                        x-data=""
+                                                        x-on:click.prevent="$dispatch('open-modal', 'revise-module-{{ $module->id }}')"
+                                                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white text-xs font-semibold shadow-xs transition"
+                                                        title="Upload Perbaikan">
+                                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                                        </svg>
+                                                        <span>Upload Perbaikan</span>
+                                                    </button>
                                                 @endif
 
-                                                <!-- Download / Preview PDF -->
+                                                <!-- Download / Preview PDF or Open Link -->
                                                 <a href="{{ route('modules.show', $module->id) }}" target="_blank"
                                                    class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 hover:border-emerald-300 text-xs font-semibold text-gray-700 hover:text-emerald-700 hover:bg-emerald-50/50 transition">
-                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                                                    </svg>
-                                                    <span>Lihat PDF</span>
+                                                    @if ($isLink)
+                                                        <svg class="w-3.5 h-3.5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                                        </svg>
+                                                        <span>Buka Link</span>
+                                                    @else
+                                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                                                        </svg>
+                                                        <span>Lihat PDF</span>
+                                                    @endif
                                                 </a>
 
                                                 <!-- Hapus Modul -->
@@ -307,15 +460,24 @@
                                 @endforeach
                             </tbody>
                         </table>
-                    </div>
+                        </div>{{-- end hidden lg:block --}}
+                    </div>{{-- end overflow-hidden --}}
+
+                    <!-- Pagination -->
+                    @if ($modules->hasPages())
+                        <div class="px-6 py-4 border-t border-gray-100 bg-gray-50/50">
+                            {{ $modules->links() }}
+                        </div>
+                    @endif
                 </div>
             @endif
 
         </div>
 
-        <!-- Modal Upload Modul Praktikum (PDF) menggunakan Breeze x-modal -->
+        <!-- Modal Upload Modul Praktikum (PDF / Link) menggunakan Breeze x-modal -->
         <x-modal name="upload-module" :show="$errors->any()" focusable maxWidth="lg">
             <form method="POST" action="{{ route('modules.store') }}" enctype="multipart/form-data" x-data="{
+                uploadType: 'pdf',
                 fileName: '',
                 fileSize: '',
                 handleFileSelect(e) {
@@ -344,7 +506,7 @@
                                 Unggah Modul Praktikum
                             </h3>
                             <p class="text-xs text-gray-500">
-                                Unggah file berkas PDF modul perkuliahan (Maksimal 5MB).
+                                Pilih metode unggah berkas PDF atau tautan/link modul.
                             </p>
                         </div>
                     </div>
@@ -415,8 +577,39 @@
                         @enderror
                     </div>
 
-                    <!-- Upload Berkas PDF (Max 5MB) -->
+                    <!-- Pilihan Tipe File: PDF atau Link -->
                     <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">
+                            Tipe File <span class="text-red-500">*</span>
+                        </label>
+                        <div class="grid grid-cols-2 gap-3">
+                            <label 
+                                @click="uploadType = 'pdf'" 
+                                :class="uploadType === 'pdf' ? 'border-emerald-500 bg-emerald-50/50 text-emerald-900 ring-2 ring-emerald-500/20' : 'border-gray-200 hover:border-gray-300 text-gray-700 bg-white'" 
+                                class="flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer transition">
+                                <input type="radio" name="file_type" value="pdf" x-model="uploadType" class="text-emerald-600 focus:ring-emerald-500">
+                                <input type="hidden" name="upload_type" :value="uploadType">
+                                <div>
+                                    <span class="block text-xs sm:text-sm font-bold">PDF</span>
+                                    <span class="block text-[11px] text-gray-500">Unggah file .pdf</span>
+                                </div>
+                            </label>
+
+                            <label 
+                                @click="uploadType = 'link'" 
+                                :class="uploadType === 'link' ? 'border-emerald-500 bg-emerald-50/50 text-emerald-900 ring-2 ring-emerald-500/20' : 'border-gray-200 hover:border-gray-300 text-gray-700 bg-white'" 
+                                class="flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer transition">
+                                <input type="radio" name="file_type" value="link" x-model="uploadType" class="text-emerald-600 focus:ring-emerald-500">
+                                <div>
+                                    <span class="block text-xs sm:text-sm font-bold">Link</span>
+                                    <span class="block text-[11px] text-gray-500">Google Drive / URL</span>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Form Unggah Berkas PDF (Ketika uploadType === 'pdf') -->
+                    <div x-show="uploadType === 'pdf'">
                         <label class="block text-sm font-semibold text-gray-700 mb-1">
                             Berkas File Modul (PDF, Maks. 5MB) <span class="text-red-500">*</span>
                         </label>
@@ -435,7 +628,7 @@
                                             name="file"
                                             type="file"
                                             accept=".pdf"
-                                            required
+                                            :required="uploadType === 'pdf'"
                                             @change="handleFileSelect"
                                             class="sr-only">
                                     </label>
@@ -457,6 +650,40 @@
                             </div>
                         </div>
                         @error('file')
+                            <p class="text-xs text-red-600 mt-1.5 flex items-center gap-1">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                <span>{{ $message }}</span>
+                            </p>
+                        @enderror
+                    </div>
+
+                    <!-- Form Input Link URL (Ketika uploadType === 'link') -->
+                    <div x-show="uploadType === 'link'" x-cloak>
+                        <label for="link_url" class="block text-sm font-semibold text-gray-700 mb-1">
+                            Tautan / Link Modul (Google Drive / Web) <span class="text-red-500">*</span>
+                        </label>
+                        <div class="relative">
+                            <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                                </svg>
+                            </div>
+                            <input
+                                type="url"
+                                name="link_url"
+                                id="link_url"
+                                :required="uploadType === 'link'"
+                                value="{{ old('link_url') }}"
+                                placeholder="Contoh: https://drive.google.com/file/d/... atau https://..."
+                                class="w-full pl-10 rounded-xl border-gray-300 shadow-2xs focus:border-emerald-500 focus:ring-emerald-500 text-sm py-2.5 pr-3.5 placeholder:text-gray-400 @error('link_url') border-red-300 focus:border-red-500 focus:ring-red-500 @enderror"
+                            />
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1.5">
+                            Jika menggunakan tautan Google Drive, pastikan izin akses tautan telah diatur ke "Siapa saja yang memiliki link".
+                        </p>
+                        @error('link_url')
                             <p class="text-xs text-red-600 mt-1.5 flex items-center gap-1">
                                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
@@ -501,5 +728,136 @@
                 </div>
             </form>
         </x-modal>
+
+        <!-- Modals Form Revisi Modul (PDF / Link) -->
+        @foreach ($modules as $module)
+            @if ($module->status === 'revision')
+                <x-modal name="revise-module-{{ $module->id }}" focusable maxWidth="lg">
+                    <form method="POST" action="{{ route('modules.updateRevision', $module->id) }}" enctype="multipart/form-data" class="p-0" x-data="{
+                        revisionType: '{{ in_array($module->storage_type, ['link', 'gdrive']) ? 'link' : 'pdf' }}'
+                    }">
+                        @csrf
+
+                        <!-- Header Modal Revisi -->
+                        <div class="bg-gray-50/80 px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3 class="text-base font-bold text-gray-900">
+                                        Perbaiki Revisi Modul
+                                    </h3>
+                                    <p class="text-xs text-gray-500">
+                                        Unggah berkas perbaikan PDF atau tautan link modul praktikum.
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                x-on:click="$dispatch('close')"
+                                class="text-gray-400 hover:text-gray-600 rounded-lg p-1 transition-colors">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                </svg>
+                            </button>
+                        </div>
+
+                        <!-- Body Modal Revisi -->
+                        <div class="p-6 space-y-4">
+                            <div>
+                                <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider block">Judul Modul:</span>
+                                <p class="text-sm font-bold text-gray-900 mt-0.5">{{ $module->title }}</p>
+                            </div>
+
+                            @if ($module->kajur_notes)
+                                <div class="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-800">
+                                    <strong class="font-semibold block text-red-900">Catatan Revisi dari Kajur:</strong>
+                                    <p class="whitespace-pre-line mt-1 text-red-700">{{ $module->kajur_notes }}</p>
+                                </div>
+                            @endif
+
+                            <!-- Pilihan Tipe File (Radio Button) -->
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-1.5">
+                                    Tipe File <span class="text-red-500">*</span>
+                                </label>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <label 
+                                        @click="revisionType = 'pdf'" 
+                                        :class="revisionType === 'pdf' ? 'border-amber-500 bg-amber-50/50 text-amber-900 ring-2 ring-amber-500/20' : 'border-gray-200 hover:border-gray-300 text-gray-700 bg-white'" 
+                                        class="flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer transition">
+                                        <input type="radio" name="file_type" value="pdf" x-model="revisionType" class="text-amber-600 focus:ring-amber-500">
+                                        <input type="hidden" name="upload_type" :value="revisionType">
+                                        <div>
+                                            <span class="block text-xs sm:text-sm font-bold">PDF</span>
+                                            <span class="block text-[11px] text-gray-500">Unggah file .pdf</span>
+                                        </div>
+                                    </label>
+
+                                    <label 
+                                        @click="revisionType = 'link'" 
+                                        :class="revisionType === 'link' ? 'border-amber-500 bg-amber-50/50 text-amber-900 ring-2 ring-amber-500/20' : 'border-gray-200 hover:border-gray-300 text-gray-700 bg-white'" 
+                                        class="flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer transition">
+                                        <input type="radio" name="file_type" value="link" x-model="revisionType" class="text-amber-600 focus:ring-amber-500">
+                                        <div>
+                                            <span class="block text-xs sm:text-sm font-bold">Link</span>
+                                            <span class="block text-[11px] text-gray-500">Google Drive / URL</span>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Dinamis: Jika PDF muncul input file -->
+                            <div x-show="revisionType === 'pdf'">
+                                <label class="block text-sm font-semibold text-gray-700 mb-1">
+                                    Berkas File Perbaikan (PDF, Maks. 5MB) <span class="text-red-500">*</span>
+                                </label>
+                                <input
+                                    type="file"
+                                    name="file"
+                                    accept=".pdf"
+                                    :required="revisionType === 'pdf'"
+                                    class="block w-full text-xs text-gray-600 border border-gray-300 rounded-xl cursor-pointer bg-gray-50 p-2.5 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-amber-100 file:text-amber-800 hover:file:bg-amber-200"
+                                />
+                            </div>
+
+                            <!-- Dinamis: Jika Link muncul input URL -->
+                            <div x-show="revisionType === 'link'" x-cloak>
+                                <label for="rev_link_url_{{ $module->id }}" class="block text-sm font-semibold text-gray-700 mb-1">
+                                    Tautan / Link Modul (URL) <span class="text-red-500">*</span>
+                                </label>
+                                <input
+                                    type="url"
+                                    name="link_url"
+                                    id="rev_link_url_{{ $module->id }}"
+                                    value="{{ in_array($module->storage_type, ['link', 'gdrive']) ? $module->file_path : '' }}"
+                                    :required="revisionType === 'link'"
+                                    placeholder="https://..."
+                                    class="w-full rounded-xl border-gray-300 shadow-2xs focus:border-amber-500 focus:ring-amber-500 text-sm py-2.5 px-3.5 placeholder:text-gray-400"
+                                />
+                            </div>
+                        </div>
+
+                        <!-- Footer Modal Revisi -->
+                        <div class="bg-gray-50/80 px-6 py-4 border-t border-gray-100 flex items-center justify-end gap-3">
+                            <button
+                                type="button"
+                                x-on:click="$dispatch('close')"
+                                class="px-4 py-2.5 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-white transition-colors focus:outline-none">
+                                Batal
+                            </button>
+                            <button
+                                type="submit"
+                                class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white text-sm font-semibold shadow-xs transition-all focus:outline-none">
+                                <span>Upload Perbaikan</span>
+                            </button>
+                        </div>
+                    </form>
+                </x-modal>
+            @endif
+        @endforeach
     </div>
 </x-app-layout>

@@ -24,6 +24,8 @@ class Department extends Model
 
     /**
      * Get the faculty to which this department belongs.
+     *
+     * @return BelongsTo<Faculty, $this>
      */
     public function faculty(): BelongsTo
     {
@@ -32,6 +34,8 @@ class Department extends Model
 
     /**
      * Get the users (dosen, kajur, etc.) belonging to this department.
+     *
+     * @return HasMany<User, $this>
      */
     public function users(): HasMany
     {

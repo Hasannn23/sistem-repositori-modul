@@ -6,6 +6,7 @@ namespace App\Models;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -75,6 +76,16 @@ class User extends Authenticatable
     public function reviewedModules(): HasMany
     {
         return $this->hasMany(Module::class, 'kajur_id');
+    }
+
+    /**
+     * Get the classes that this user (student) has joined.
+     *
+     * @return BelongsToMany<CourseClass, $this>
+     */
+    public function joinedClasses(): BelongsToMany
+    {
+        return $this->belongsToMany(CourseClass::class, 'course_class_user')->withTimestamps();
     }
 
     /**

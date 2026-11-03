@@ -22,6 +22,8 @@ class Faculty extends Model
 
     /**
      * Get the departments associated with this faculty.
+     *
+     * @return HasMany<Department, $this>
      */
     public function departments(): HasMany
     {

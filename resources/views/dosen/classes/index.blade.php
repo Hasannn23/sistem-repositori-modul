@@ -14,7 +14,7 @@
                     {{ __('Daftar Ruang Kelas') }}
                 </h2>
                 <p class="text-sm text-gray-600 mt-1">
-                    Kelola ruang kelas perkuliahan, bagikan kode referral ke mahasiswa, dan unggah modul praktikum.
+                    Kelola ruang kelas perkuliahan dan unggah modul praktikum.
                 </p>
             </div>
 
@@ -81,7 +81,7 @@
                     </div>
                     <div>
                         <span class="text-xs font-medium text-gray-500 uppercase tracking-wider">Total Kelas Saya</span>
-                        <p class="text-2xl font-extrabold text-gray-900 leading-none mt-1">{{ $classes->count() }}</p>
+                        <p class="text-2xl font-extrabold text-gray-900 leading-none mt-1">{{ $classes->total() }}</p>
                     </div>
                 </div>
 
@@ -224,6 +224,11 @@
                             </div>
                         </div>
                     @endforeach
+                </div>
+
+                <!-- Navigasi Pagination Kelas -->
+                <div class="mt-8">
+                    {{ $classes->links() }}
                 </div>
             @endif
 

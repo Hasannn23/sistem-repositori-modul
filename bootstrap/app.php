@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Middleware\EnsureUserIsDosen;
+use App\Http\Middleware\EnsureUserIsSuperAdmin;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -13,7 +15,8 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
-            'dosen' => \App\Http\Middleware\EnsureUserIsDosen::class,
+            'dosen' => EnsureUserIsDosen::class,
+            'super_admin' => EnsureUserIsSuperAdmin::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

@@ -11,9 +11,9 @@ use Illuminate\View\View;
 class KajurModuleController extends Controller
 {
     /**
-     * Display a listing of modules waiting for review in Kajur's department.
+     * Display a listing of modules waiting for review or approved in Kajur's department.
      */
-    public function index(): View
+    public function index(Request $request): View
     {
         $user = Auth::user();
         if (!in_array($user->role, ['kajur', 'super_admin'])) {
@@ -21,19 +21,51 @@ class KajurModuleController extends Controller
         }
 
         $departmentId = $user->department_id;
+        $tab = $request->query('tab', 'waiting'); // 'waiting' or 'approved'
+        $search = $request->query('search');
 
-        $query = Module::where('status', 'waiting_review')
+        // Counts for tab badges
+        $waitingCountQuery = Module::where('status', 'waiting_review');
+        $approvedCountQuery = Module::where('status', 'approved');
+
+        if ($departmentId && $user->role === 'kajur') {
+            $waitingCountQuery->whereHas('courseClass.dosen', function ($q) use ($departmentId) {
+                $q->where('department_id', $departmentId);
+            });
+            $approvedCountQuery->whereHas('courseClass.dosen', function ($q) use ($departmentId) {
+                $q->where('department_id', $departmentId);
+            });
+        }
+
+        $waitingCount = $waitingCountQuery->count();
+        $approvedCount = $approvedCountQuery->count();
+
+        // Query active tab
+        $status = ($tab === 'approved') ? 'approved' : 'waiting_review';
+        $query = Module::where('status', $status)
             ->with(['courseClass.dosen.department']);
 
-        if ($departmentId) {
+        if ($departmentId && $user->role === 'kajur') {
             $query->whereHas('courseClass.dosen', function ($q) use ($departmentId) {
                 $q->where('department_id', $departmentId);
             });
         }
 
-        $modules = $query->latest('updated_at')->get();
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('title', 'like', "%{$search}%")
+                    ->orWhereHas('courseClass', function ($cq) use ($search) {
+                        $cq->where('name', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('courseClass.dosen', function ($dq) use ($search) {
+                        $dq->where('name', 'like', "%{$search}%");
+                    });
+            });
+        }
 
-        return view('kajur.modules.index', compact('modules'));
+        $modules = $query->latest('updated_at')->paginate(10)->withQueryString();
+
+        return view('kajur.modules.index', compact('modules', 'tab', 'waitingCount', 'approvedCount', 'search'));
     }
 
     /**

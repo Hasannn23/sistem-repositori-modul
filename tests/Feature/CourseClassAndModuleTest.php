@@ -454,3 +454,57 @@ test('module updateRevision validates file is required, pdf, and max 5MB', funct
     $response->assertSessionHasErrors('file');
 });
 
+test('dosen can store module as link and saves storage_type as link', function () {
+    $dosen = User::factory()->create(['role' => 'dosen']);
+    $class = CourseClass::create([
+        'dosen_id' => $dosen->id,
+        'name' => 'Praktikum Cloud Computing',
+        'referral_code' => 'CLD101',
+    ]);
+
+    $response = $this->actingAs($dosen)->post(route('modules.store'), [
+        'course_class_id' => $class->id,
+        'title' => 'Modul Cloud AWS Link',
+        'file_type' => 'link',
+        'link_url' => 'https://drive.google.com/file/d/abc123xyz/view',
+    ]);
+
+    $response->assertSessionHas('success');
+    $this->assertDatabaseHas('modules', [
+        'course_class_id' => $class->id,
+        'title' => 'Modul Cloud AWS Link',
+        'storage_type' => 'link',
+        'file_path' => 'https://drive.google.com/file/d/abc123xyz/view',
+        'status' => 'draft',
+    ]);
+});
+
+test('dosen can update revision as link and saves storage_type as link', function () {
+    $dosen = User::factory()->create(['role' => 'dosen']);
+    $class = CourseClass::create([
+        'dosen_id' => $dosen->id,
+        'name' => 'Praktikum Devops',
+        'referral_code' => 'DVP101',
+    ]);
+
+    $module = Module::create([
+        'course_class_id' => $class->id,
+        'title' => 'Modul Docker',
+        'storage_type' => 'pdf',
+        'file_path' => 'modules/docker.pdf',
+        'is_locked' => true,
+        'status' => 'revision',
+    ]);
+
+    $response = $this->actingAs($dosen)->post(route('modules.updateRevision', $module->id), [
+        'file_type' => 'link',
+        'link_url' => 'https://github.com/example/docker-guide',
+    ]);
+
+    $response->assertSessionHas('success');
+    $module->refresh();
+    expect($module->storage_type)->toBe('link');
+    expect($module->file_path)->toBe('https://github.com/example/docker-guide');
+    expect($module->status)->toBe('waiting_review');
+});
+

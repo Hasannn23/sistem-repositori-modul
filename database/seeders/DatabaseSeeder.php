@@ -91,5 +91,8 @@ class DatabaseSeeder extends Seeder
             'status' => 'waiting_review',
             'is_locked' => true,
         ]);
+
+        // Seed data kampus (Fakultas, Jurusan, dan Dummy Users)
+        $this->call(CampusDataSeeder::class);
     }
 }

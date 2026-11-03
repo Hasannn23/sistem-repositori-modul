@@ -24,7 +24,7 @@
             <div class="flex items-center gap-2">
                 <span class="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 border border-blue-200 text-blue-800 font-semibold text-sm rounded-xl">
                     <span class="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse"></span>
-                    <span>{{ $modules->count() }} Modul Menunggu ACC</span>
+                    <span>{{ $waitingCount }} Modul Menunggu ACC</span>
                 </span>
             </div>
         </div>
@@ -79,7 +79,53 @@
                 </div>
             @endif
 
-            <!-- Konten Utama: Daftar Modul Waiting Review -->
+            <!-- Tab Switcher & Search Bar -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <!-- Tabs -->
+                <div class="flex items-center gap-2 p-1 bg-gray-100 rounded-xl max-w-fit">
+                    <a href="{{ route('kajur.modules.index', ['tab' => 'waiting']) }}" 
+                       class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition {{ $tab !== 'approved' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-600 hover:text-gray-900' }}">
+                        <span>Menunggu Review</span>
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold {{ $tab !== 'approved' ? 'bg-amber-100 text-amber-800' : 'bg-gray-200 text-gray-700' }}">
+                            {{ $waitingCount }}
+                        </span>
+                    </a>
+
+                    <a href="{{ route('kajur.modules.index', ['tab' => 'approved']) }}" 
+                       class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition {{ $tab === 'approved' ? 'bg-white text-emerald-800 shadow-xs' : 'text-gray-600 hover:text-gray-900' }}">
+                        <span>Daftar Modul Disetujui</span>
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold {{ $tab === 'approved' ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-200 text-gray-700' }}">
+                            {{ $approvedCount }}
+                        </span>
+                    </a>
+                </div>
+
+                <!-- Search -->
+                <form method="GET" action="{{ route('kajur.modules.index') }}" class="flex items-center gap-2">
+                    <input type="hidden" name="tab" value="{{ $tab }}">
+                    <div class="relative">
+                        <input 
+                            type="text" 
+                            name="search" 
+                            value="{{ request('search') }}" 
+                            placeholder="Cari judul, kelas, dosen..." 
+                            class="text-xs sm:text-sm rounded-xl border-gray-300 py-2 pl-9 pr-3 focus:border-blue-500 focus:ring-blue-500 placeholder-gray-400 w-full sm:w-64"
+                        />
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                            </svg>
+                        </div>
+                    </div>
+                    @if(request('search'))
+                        <a href="{{ route('kajur.modules.index', ['tab' => $tab]) }}" class="p-2 text-xs text-gray-400 hover:text-gray-600 rounded-lg" title="Reset">
+                            ✕
+                        </a>
+                    @endif
+                </form>
+            </div>
+
+            <!-- Konten Utama Berdasarkan Tab -->
             @if ($modules->isEmpty())
                 <div class="bg-white rounded-2xl border border-gray-100 p-12 text-center shadow-xs">
                     <div class="w-16 h-16 mx-auto bg-blue-50 text-blue-500 rounded-2xl flex items-center justify-center mb-4">
@@ -87,146 +133,267 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                         </svg>
                     </div>
-                    <h3 class="text-lg font-bold text-gray-900 mb-1">Semua Modul Telah Ditinjau</h3>
-                    <p class="text-sm text-gray-500 max-w-md mx-auto">
-                        Saat ini tidak ada draf modul praktikum yang sedang menunggu persetujuan (ACC) dari dosen di jurusan Anda.
-                    </p>
+                    @if ($tab === 'approved')
+                        <h3 class="text-lg font-bold text-gray-900 mb-1">Belum Ada Modul yang Disetujui</h3>
+                        <p class="text-sm text-gray-500 max-w-md mx-auto">
+                            Saat ini belum ada modul praktikum yang telah disetujui (ACC) di lingkungan jurusan Anda.
+                        </p>
+                    @else
+                        <h3 class="text-lg font-bold text-gray-900 mb-1">Semua Modul Telah Ditinjau</h3>
+                        <p class="text-sm text-gray-500 max-w-md mx-auto">
+                            Saat ini tidak ada draf modul praktikum yang sedang menunggu persetujuan (ACC) dari dosen di jurusan Anda.
+                        </p>
+                    @endif
                 </div>
             @else
                 <div class="bg-white rounded-2xl border border-gray-100 shadow-xs overflow-hidden">
-                    <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                    <div class="px-6 py-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                         <div>
                             <h3 class="font-bold text-base text-gray-900">
-                                Antrean Pengajuan Modul ({{ $modules->count() }})
+                                @if ($tab === 'approved')
+                                    Arsip Modul Praktikum Disetujui ({{ $modules->total() }})
+                                @else
+                                    Antrean Pengajuan Modul ({{ $modules->total() }})
+                                @endif
                             </h3>
                             <p class="text-xs text-gray-500 mt-0.5">
-                                Periksa konten modul PDF, lalu berikan persetujuan atau catatan revisi.
+                                @if ($tab === 'approved')
+                                    Daftar modul yang telah divalidasi dan dapat diakses mahasiswa secara publik.
+                                @else
+                                    Periksa berkas atau tautan modul, lalu berikan persetujuan atau catatan evaluasi revisi.
+                                @endif
                             </p>
                         </div>
-                        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-200">
-                            ● Menunggu Review
+                        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold {{ $tab === 'approved' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-blue-100 text-blue-800 border border-blue-200' }}">
+                            {{ $tab === 'approved' ? '● Disetujui (ACC)' : '● Menunggu Review' }}
                         </span>
                     </div>
 
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left border-collapse">
-                            <thead>
-                                <tr class="bg-gray-50/70 border-b border-gray-100 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                                    <th class="py-3.5 px-6">Judul Modul</th>
-                                    <th class="py-3.5 px-6">Dosen Pengampu</th>
-                                    <th class="py-3.5 px-6">Ruang Kelas</th>
-                                    <th class="py-3.5 px-6">Tanggal Diajukan</th>
-                                    <th class="py-3.5 px-6 text-right">Aksi & Keputusan</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-gray-100 text-sm">
-                                @foreach ($modules as $module)
-                                    <tr class="hover:bg-gray-50/60 transition-colors">
-                                        <!-- Judul Modul -->
-                                        <td class="py-4 px-6">
-                                            <div class="flex items-start gap-3">
-                                                <div class="w-9 h-9 rounded-lg bg-red-50 text-red-600 flex items-center justify-center shrink-0 mt-0.5">
-                                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
-                                                    </svg>
-                                                </div>
-                                                <div class="min-w-0">
-                                                    <span class="font-bold text-gray-900 block leading-tight">
-                                                        {{ $module->title }}
-                                                    </span>
-                                                    <span class="text-xs text-gray-400 font-mono mt-0.5 block truncate max-w-xs">
-                                                        {{ basename($module->file_path) }}
-                                                    </span>
-                                                    @if ($module->kajur_notes)
-                                                        <div class="mt-1.5 text-xs text-amber-700 bg-amber-50 p-1.5 rounded border border-amber-200">
-                                                            <strong class="font-semibold">Catatan Sebelumnya:</strong> {{ Str::limit($module->kajur_notes, 80) }}
-                                                        </div>
-                                                    @endif
-                                                </div>
-                                            </div>
-                                        </td>
-
-                                        <!-- Dosen Pengampu -->
-                                        <td class="py-4 px-6">
-                                            <div class="flex items-center gap-2.5">
-                                                <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-700 font-bold text-xs flex items-center justify-center shrink-0">
-                                                    {{ $module->courseClass?->dosen?->initials() ?? 'DS' }}
-                                                </div>
-                                                <div>
-                                                    <span class="font-semibold text-gray-900 block leading-tight">
-                                                        {{ $module->courseClass?->dosen?->name ?? 'Dosen Tidak Diketahui' }}
-                                                    </span>
-                                                    <span class="text-xs text-gray-500 block">
-                                                        {{ $module->courseClass?->dosen?->email ?? '-' }}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </td>
-
-                                        <!-- Nama Kelas -->
-                                        <td class="py-4 px-6">
-                                            <div>
-                                                <span class="font-medium text-gray-800 block">
-                                                    {{ $module->courseClass?->name ?? '-' }}
-                                                </span>
-                                                @if ($module->courseClass?->referral_code)
-                                                    <span class="inline-block font-mono text-[11px] font-semibold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 mt-0.5">
-                                                        {{ $module->courseClass->referral_code }}
-                                                    </span>
+                    <div class="overflow-hidden">
+                        {{-- Mobile Card View --}}
+                        <div class="block lg:hidden divide-y divide-gray-100">
+                            @foreach ($modules as $module)
+                                @php
+                                    $isLink = in_array($module->storage_type, ['link', 'gdrive']) || str_starts_with($module->file_path, 'http');
+                                    $fileUrl = ($module->storage_type === 'pdf') ? asset('storage/' . $module->file_path) : $module->file_path;
+                                @endphp
+                                <div class="p-4 hover:bg-gray-50/60 transition-colors">
+                                    <div class="flex items-start justify-between gap-3">
+                                        <div class="flex items-start gap-2.5 min-w-0">
+                                            <div class="w-8 h-8 rounded-lg {{ $isLink ? 'bg-blue-50 text-blue-600' : 'bg-red-50 text-red-600' }} flex items-center justify-center shrink-0 mt-0.5">
+                                                @if ($isLink)
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
+                                                @else
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
                                                 @endif
                                             </div>
-                                        </td>
-
-                                        <!-- Tanggal Pengajuan -->
-                                        <td class="py-4 px-6 text-xs text-gray-500 whitespace-nowrap">
-                                            {{ $module->updated_at->format('d M Y, H:i') }}
-                                        </td>
-
-                                        <!-- Aksi Keputusan Kajur -->
-                                        <td class="py-4 px-6 text-right whitespace-nowrap">
-                                            <div class="inline-flex items-center gap-2">
-                                                <!-- Tombol Lihat PDF -->
-                                                <a href="{{ route('modules.show', $module->id) }}" target="_blank"
-                                                   class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 hover:border-gray-400 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition"
-                                                   title="Buka dan baca dokumen modul PDF">
-                                                    <svg class="w-3.5 h-3.5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                                                    </svg>
-                                                    <span>Lihat PDF</span>
+                                            <div class="min-w-0">
+                                                <span class="font-bold text-gray-900 block leading-tight text-sm">{{ $module->title }}</span>
+                                                <div class="flex items-center gap-1.5 mt-0.5">
+                                                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase {{ $isLink ? 'bg-blue-50 text-blue-700' : 'bg-red-50 text-red-700' }}">{{ $isLink ? 'LINK' : 'PDF' }}</span>
+                                                    <span class="text-[11px] text-gray-500">{{ $module->courseClass?->dosen?->name ?? 'Dosen' }}</span>
+                                                </div>
+                                                <div class="text-[11px] text-gray-400 mt-0.5">{{ $module->courseClass?->name ?? '-' }} &bull; {{ $module->updated_at->format('d M Y') }}</div>
+                                            </div>
+                                        </div>
+                                        <div class="flex items-center gap-1.5 shrink-0">
+                                            @if ($tab !== 'approved')
+                                                <a href="{{ $fileUrl }}" target="_blank" class="p-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition" title="{{ $isLink ? 'Buka Link' : 'Lihat PDF' }}">
+                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
                                                 </a>
-
-                                                <!-- Tombol Setujui (ACC) -->
-                                                <form method="POST" action="{{ route('kajur.modules.approve', $module->id) }}" onsubmit="return confirm('Apakah Anda yakin ingin menyetujui (ACC) modul ini? Modul akan terbuka untuk akses publik.');" class="inline">
+                                                <form method="POST" action="{{ route('kajur.modules.approve', $module->id) }}" onsubmit="return confirm('Setujui modul ini?');" class="inline">
                                                     @csrf
-                                                    <button
-                                                        type="submit"
-                                                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-semibold shadow-xs transition"
-                                                        title="Setujui modul ini agar dapat diunduh publik">
-                                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                                                        </svg>
-                                                        <span>Setujui (ACC)</span>
+                                                    <button type="submit" class="p-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition" title="Setujui">
+                                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
                                                     </button>
                                                 </form>
-
-                                                <!-- Tombol Kembalikan (Revisi) -->
-                                                <button
-                                                    type="button"
-                                                    x-on:click="openRejectModal('{{ addslashes($module->title) }}', '{{ route('kajur.modules.reject', $module->id) }}')"
-                                                    class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 active:bg-red-800 text-white text-xs font-semibold shadow-xs transition"
-                                                    title="Kembalikan modul ke dosen dengan catatan revisi">
-                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"></path>
-                                                    </svg>
-                                                    <span>Kembalikan (Revisi)</span>
+                                                <button type="button" x-on:click="openRejectModal('{{ addslashes($module->title) }}', '{{ route('kajur.modules.reject', $module->id) }}')" class="p-1.5 rounded-lg bg-red-600 text-white hover:bg-red-700 transition" title="Revisi">
+                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"></path></svg>
                                                 </button>
-                                            </div>
-                                        </td>
+                                            @else
+                                                <a href="{{ $fileUrl }}" target="_blank" class="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1.5 rounded-lg transition" title="{{ $isLink ? 'Buka Link' : 'Buka PDF' }}">
+                                                    <span>{{ $isLink ? 'Buka Link' : 'Buka PDF' }}</span>
+                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                                                </a>
+                                            @endif
+                                        </div>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+
+                        {{-- Desktop Table View --}}
+                        <div class="hidden lg:block overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-gray-50/70 border-b border-gray-100 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                        <th class="py-3.5 px-6">Judul Modul</th>
+                                        <th class="py-3.5 px-6">Dosen Pengampu</th>
+                                        <th class="py-3.5 px-6">Ruang Kelas</th>
+                                        <th class="py-3.5 px-6">
+                                            {{ $tab === 'approved' ? 'Tanggal Disetujui' : 'Tanggal Diajukan' }}
+                                        </th>
+                                        <th class="py-3.5 px-6 text-right">Aksi</th>
                                     </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100 text-sm">
+                                    @foreach ($modules as $module)
+                                        @php
+                                            $isLink = in_array($module->storage_type, ['link', 'gdrive']) || str_starts_with($module->file_path, 'http');
+                                            $fileUrl = ($module->storage_type === 'pdf') ? asset('storage/' . $module->file_path) : $module->file_path;
+                                        @endphp
+                                        <tr class="hover:bg-gray-50/60 transition-colors">
+                                            <!-- Judul Modul -->
+                                            <td class="py-4 px-6">
+                                                <div class="flex items-start gap-3">
+                                                    @if ($isLink)
+                                                        <div class="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 mt-0.5">
+                                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
+                                                            </svg>
+                                                        </div>
+                                                    @else
+                                                        <div class="w-9 h-9 rounded-lg bg-red-50 text-red-600 flex items-center justify-center shrink-0 mt-0.5">
+                                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                                                            </svg>
+                                                        </div>
+                                                    @endif
+                                                    <div class="min-w-0">
+                                                        <span class="font-bold text-gray-900 block leading-tight">
+                                                            {{ $module->title }}
+                                                        </span>
+                                                        <div class="flex items-center gap-2 mt-0.5">
+                                                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider {{ $isLink ? 'bg-blue-50 text-blue-700' : 'bg-red-50 text-red-700' }}">
+                                                                {{ $isLink ? 'LINK' : 'PDF' }}
+                                                            </span>
+                                                            <span class="text-xs text-gray-400 font-mono truncate max-w-xs" title="{{ $module->file_path }}">
+                                                                {{ $isLink ? $module->file_path : basename($module->file_path) }}
+                                                            </span>
+                                                        </div>
+                                                        @if ($module->kajur_notes && $tab !== 'approved')
+                                                            <div class="mt-1.5 text-xs text-amber-700 bg-amber-50 p-1.5 rounded border border-amber-200">
+                                                                <strong class="font-semibold">Catatan Sebelumnya:</strong> {{ Str::limit($module->kajur_notes, 80) }}
+                                                            </div>
+                                                        @endif
+                                                    </div>
+                                                </div>
+                                            </td>
+
+                                            <!-- Dosen Pengampu -->
+                                            <td class="py-4 px-6">
+                                                <div class="flex items-center gap-2.5">
+                                                    <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-700 font-bold text-xs flex items-center justify-center shrink-0">
+                                                        {{ $module->courseClass?->dosen?->initials() ?? 'DS' }}
+                                                    </div>
+                                                    <div>
+                                                        <span class="font-semibold text-gray-900 block leading-tight">
+                                                            {{ $module->courseClass?->dosen?->name ?? 'Dosen Tidak Diketahui' }}
+                                                        </span>
+                                                        <span class="text-xs text-gray-500 block">
+                                                            {{ $module->courseClass?->dosen?->email ?? '-' }}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </td>
+
+                                            <!-- Nama Kelas -->
+                                            <td class="py-4 px-6">
+                                                <div>
+                                                    <span class="font-medium text-gray-800 block">
+                                                        {{ $module->courseClass?->name ?? '-' }}
+                                                    </span>
+                                                    @if ($module->courseClass?->referral_code)
+                                                        <span class="inline-block font-mono text-[11px] font-semibold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 mt-0.5">
+                                                            {{ $module->courseClass->referral_code }}
+                                                        </span>
+                                                    @endif
+                                                </div>
+                                            </td>
+
+                                            <!-- Tanggal -->
+                                            <td class="py-4 px-6 text-xs text-gray-500 whitespace-nowrap">
+                                                {{ $module->updated_at->format('d M Y, H:i') }}
+                                            </td>
+
+                                            <!-- Aksi Keputusan / Buka Modul -->
+                                            <td class="py-4 px-6 text-right whitespace-nowrap">
+                                                <div class="inline-flex items-center gap-2">
+                                                    @if ($tab === 'approved')
+                                                        <!-- Tombol Aksi di Halaman Modul Disetujui (Dapat Diklik Langsung) -->
+                                                        <a href="{{ $fileUrl }}" target="_blank"
+                                                           class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-300 hover:border-emerald-400 bg-emerald-50 hover:bg-emerald-100 text-xs font-semibold text-emerald-800 transition shadow-2xs"
+                                                           title="{{ $isLink ? 'Buka tautan link modul' : 'Buka file PDF di storage' }}">
+                                                            @if ($isLink)
+                                                                <svg class="w-3.5 h-3.5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                                                </svg>
+                                                                <span>Buka Link</span>
+                                                            @else
+                                                                <svg class="w-3.5 h-3.5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                                                                </svg>
+                                                                <span>Buka PDF</span>
+                                                            @endif
+                                                        </a>
+                                                    @else
+                                                        <!-- Tombol Lihat PDF / Buka Link -->
+                                                        <a href="{{ $fileUrl }}" target="_blank"
+                                                           class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 hover:border-gray-400 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition"
+                                                           title="{{ $isLink ? 'Buka tautan dokumen modul' : 'Buka dan baca dokumen modul PDF' }}">
+                                                            @if ($isLink)
+                                                                <svg class="w-3.5 h-3.5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                                                </svg>
+                                                                <span>Buka Link</span>
+                                                            @else
+                                                                <svg class="w-3.5 h-3.5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                                                                </svg>
+                                                                <span>Lihat PDF</span>
+                                                            @endif
+                                                        </a>
+
+                                                        <!-- Tombol Setujui (ACC) -->
+                                                        <form method="POST" action="{{ route('kajur.modules.approve', $module->id) }}" onsubmit="return confirm('Apakah Anda yakin ingin menyetujui (ACC) modul ini? Modul akan terbuka untuk akses publik.');" class="inline">
+                                                            @csrf
+                                                            <button
+                                                                type="submit"
+                                                                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-semibold shadow-xs transition"
+                                                                title="Setujui modul ini agar dapat diunduh publik">
+                                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                                                </svg>
+                                                                <span>Setujui (ACC)</span>
+                                                            </button>
+                                                        </form>
+
+                                                        <!-- Tombol Kembalikan (Revisi) -->
+                                                        <button
+                                                            type="button"
+                                                            x-on:click="openRejectModal('{{ addslashes($module->title) }}', '{{ route('kajur.modules.reject', $module->id) }}')"
+                                                            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 active:bg-red-800 text-white text-xs font-semibold shadow-xs transition"
+                                                            title="Kembalikan modul ke dosen dengan catatan revisi">
+                                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"></path>
+                                                            </svg>
+                                                            <span>Revisi</span>
+                                                        </button>
+                                                    @endif
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Pagination -->
+                    <div class="px-6 py-4 border-t border-gray-100 bg-gray-50/50">
+                        {{ $modules->links() }}
                     </div>
                 </div>
             @endif

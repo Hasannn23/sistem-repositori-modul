@@ -19,30 +19,56 @@ class ModuleController extends Controller
     public function index(Request $request): View
     {
         $classId = $request->query('class_id');
+        $search = $request->query('search');
         $selectedClass = null;
 
+        $user = Auth::user();
+
+        // Jika super_admin, dapat melihat modul semua kelas
+        if ($user->role === 'super_admin') {
+            $myClasses = CourseClass::orderBy('name')->get();
+
+            $query = Module::with(['courseClass', 'courseClass.dosen']);
+
+            if ($classId) {
+                $selectedClass = CourseClass::findOrFail($classId);
+                $query->where('course_class_id', $classId);
+            }
+
+            if ($search) {
+                $query->where('title', 'like', "%{$search}%");
+            }
+
+            $modules = $query->latest()->paginate(10)->withQueryString();
+
+            return view('dosen.modules.index', compact('modules', 'selectedClass', 'myClasses', 'search'));
+        }
+
         // Lecturer's classes for the filter / upload modal dropdown
-        $myClasses = CourseClass::where('dosen_id', Auth::id())
+        $myClasses = CourseClass::where('dosen_id', $user->id)
             ->orderBy('name')
             ->get();
 
+        $query = Module::query();
+
         if ($classId) {
             $selectedClass = CourseClass::where('id', $classId)
-                ->where('dosen_id', Auth::id())
+                ->where('dosen_id', $user->id)
                 ->firstOrFail();
 
-            $modules = Module::where('course_class_id', $classId)
-                ->latest()
-                ->get();
+            $query->where('course_class_id', $classId);
         } else {
             $myClassIds = $myClasses->pluck('id');
-            $modules = Module::whereIn('course_class_id', $myClassIds)
-                ->with('courseClass')
-                ->latest()
-                ->get();
+            $query->whereIn('course_class_id', $myClassIds)->with('courseClass');
         }
 
-        return view('dosen.modules.index', compact('modules', 'selectedClass', 'myClasses'));
+        if ($search) {
+            $query->where('title', 'like', "%{$search}%");
+        }
+
+        $modules = $query->latest()->paginate(10)->withQueryString();
+
+        return view('dosen.modules.index', compact('modules', 'selectedClass', 'myClasses', 'search'));
     }
 
     /**
@@ -58,6 +84,44 @@ class ModuleController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
+        $fileType = strtolower($request->input('file_type', $request->input('upload_type', 'pdf')));
+
+        if ($fileType === 'link' || $request->filled('link_url')) {
+            $request->validate([
+                'course_class_id' => ['required', 'exists:course_classes,id'],
+                'title' => ['required', 'string', 'max:255'],
+                'link_url' => ['required', 'url', 'max:1000'],
+            ], [
+                'course_class_id.required' => 'Ruang kelas wajib dipilih.',
+                'course_class_id.exists' => 'Ruang kelas yang dipilih tidak valid.',
+                'title.required' => 'Judul modul wajib diisi.',
+                'title.max' => 'Judul modul maksimal 255 karakter.',
+                'link_url.required' => 'Tautan / link modul wajib diisi.',
+                'link_url.url' => 'Format tautan tidak valid (harus diawali http:// atau https://).',
+                'link_url.max' => 'Tautan modul maksimal 1000 karakter.',
+            ]);
+
+            $courseClass = CourseClass::where('id', $request->input('course_class_id'))
+                ->when(Auth::user()->role !== 'super_admin', function ($q) {
+                    $q->where('dosen_id', Auth::id());
+                })
+                ->firstOrFail();
+
+            Module::create([
+                'course_class_id' => $courseClass->id,
+                'title' => $request->input('title'),
+                'storage_type' => 'link',
+                'file_path' => $request->input('link_url'),
+                'is_locked' => true,
+                'status' => 'draft',
+            ]);
+
+            return redirect()
+                ->route('modules.index', ['class_id' => $courseClass->id])
+                ->with('success', 'Modul praktikum berhasil ditambahkan berupa tautan/link dalam status Draft (Terkunci)!');
+        }
+
+        // Default: File PDF
         $request->validate([
             'course_class_id' => ['required', 'exists:course_classes,id'],
             'title' => ['required', 'string', 'max:255'],
@@ -73,9 +137,11 @@ class ModuleController extends Controller
             'file.max' => 'Ukuran file modul maksimal adalah 5MB.',
         ]);
 
-        // Ensure the course class belongs to the currently logged-in lecturer
+        // Ensure the course class belongs to the currently logged-in lecturer (or super_admin)
         $courseClass = CourseClass::where('id', $request->input('course_class_id'))
-            ->where('dosen_id', Auth::id())
+            ->when(Auth::user()->role !== 'super_admin', function ($q) {
+                $q->where('dosen_id', Auth::id());
+            })
             ->firstOrFail();
 
         // Upload file using Laravel Storage (disk 'public', folder 'modules')
@@ -102,9 +168,15 @@ class ModuleController extends Controller
      */
     public function show(Module $module): BinaryFileResponse|RedirectResponse
     {
-        // Check authorization: lecturer must own the class or be admin/kajur
+        // Check authorization: lecturer must own the class, staff (admin/kajur), or any authenticated user for approved modules
         $courseClass = $module->courseClass;
-        if ($courseClass && $courseClass->dosen_id !== Auth::id() && !in_array(Auth::user()->role, ['super_admin', 'kajur'])) {
+        $user = Auth::user();
+
+        $isLecturer = $courseClass && $courseClass->dosen_id === $user?->id;
+        $isStaff = in_array($user?->role, ['super_admin', 'kajur']);
+        $isApprovedAccessible = $user && $module->status === 'approved';
+
+        if (! $isLecturer && ! $isStaff && ! $isApprovedAccessible) {
             abort(403, 'Anda tidak memiliki hak akses ke modul ini.');
         }
 
@@ -113,6 +185,10 @@ class ModuleController extends Controller
                 'Content-Type' => 'application/pdf',
                 'Content-Disposition' => 'inline; filename="'.basename($module->file_path).'"',
             ]);
+        }
+
+        if (in_array($module->storage_type, ['link', 'gdrive']) || str_starts_with($module->file_path, 'http://') || str_starts_with($module->file_path, 'https://')) {
+            return redirect()->away($module->file_path);
         }
 
         return redirect()->back()->with('error', 'File dokumen PDF tidak ditemukan di server.');
@@ -197,12 +273,35 @@ class ModuleController extends Controller
     public function updateRevision(Request $request, Module $module): RedirectResponse
     {
         $courseClass = $module->courseClass;
-        if ($courseClass && $courseClass->dosen_id !== Auth::id()) {
+        if ($courseClass && $courseClass->dosen_id !== Auth::id() && Auth::user()->role !== 'super_admin') {
             abort(403, 'Anda tidak memiliki hak akses untuk merevisi modul ini.');
         }
 
         if ($module->status !== 'revision') {
             return redirect()->back()->with('error', 'Modul tidak dalam status revisi.');
+        }
+
+        $fileType = strtolower($request->input('file_type', $request->input('upload_type', in_array($module->storage_type, ['link', 'gdrive']) ? 'link' : 'pdf')));
+
+        if ($fileType === 'link' || $request->filled('link_url')) {
+            $request->validate([
+                'link_url' => ['required', 'url', 'max:1000'],
+            ], [
+                'link_url.required' => 'Tautan / link modul perbaikan wajib diisi.',
+                'link_url.url' => 'Format tautan tidak valid (harus diawali http:// atau https://).',
+                'link_url.max' => 'Tautan modul maksimal 1000 karakter.',
+            ]);
+
+            if ($module->storage_type === 'pdf' && $module->file_path && Storage::disk('public')->exists($module->file_path)) {
+                Storage::disk('public')->delete($module->file_path);
+            }
+
+            $module->storage_type = 'link';
+            $module->file_path = $request->input('link_url');
+            $module->status = 'waiting_review';
+            $module->save();
+
+            return redirect()->back()->with('success', 'Tautan modul perbaikan berhasil diajukan kembali ke Ketua Jurusan untuk ditinjau.');
         }
 
         $request->validate([
@@ -214,13 +313,14 @@ class ModuleController extends Controller
             'file.max' => 'Ukuran file modul maksimal adalah 5MB.',
         ]);
 
-        if ($module->file_path) {
+        if ($module->storage_type === 'pdf' && $module->file_path && Storage::disk('public')->exists($module->file_path)) {
             Storage::disk('public')->delete($module->file_path);
         }
 
         $uploadedFile = $request->file('file');
         $filePath = $uploadedFile->store('modules', 'public');
 
+        $module->storage_type = 'pdf';
         $module->file_path = $filePath;
         $module->status = 'waiting_review';
         $module->save();

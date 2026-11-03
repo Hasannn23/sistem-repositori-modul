@@ -19,7 +19,8 @@ class CourseClassController extends Controller
         $classes = CourseClass::where('dosen_id', Auth::id())
             ->withCount('modules')
             ->latest()
-            ->get();
+            ->paginate(10)
+            ->withQueryString();
 
         return view('dosen.classes.index', compact('classes'));
     }
