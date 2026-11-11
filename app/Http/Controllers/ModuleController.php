@@ -76,6 +76,11 @@ class ModuleController extends Controller
      */
     public function create(Request $request): RedirectResponse
     {
+        if (Auth::user()?->role === 'dosen') {
+            return redirect()->route('sayembaras.index')
+                ->with('info', 'Penyusunan modul baru saat ini dilakukan melalui jalur Sayembara Modul prodi.');
+        }
+
         return redirect()->route('modules.index', ['class_id' => $request->query('class_id')]);
     }
 
@@ -108,6 +113,8 @@ class ModuleController extends Controller
                 ->firstOrFail();
 
             Module::create([
+                'author_id' => Auth::id(),
+                'course_id' => $courseClass->course_id,
                 'course_class_id' => $courseClass->id,
                 'title' => $request->input('title'),
                 'storage_type' => 'link',
@@ -150,6 +157,8 @@ class ModuleController extends Controller
 
         // Save module with status 'draft', is_locked true, and storage_type 'pdf'
         Module::create([
+            'author_id' => Auth::id(),
+            'course_id' => $courseClass->course_id,
             'course_class_id' => $courseClass->id,
             'title' => $request->input('title'),
             'storage_type' => 'pdf',
@@ -192,6 +201,34 @@ class ModuleController extends Controller
         }
 
         return redirect()->back()->with('error', 'File dokumen PDF tidak ditemukan di server.');
+    }
+
+    /**
+     * Display the LMS multi-meeting module reader view.
+     */
+    public function showLms(Module $module): View
+    {
+        $courseClass = $module->courseClass;
+        $user = Auth::user();
+
+        $isAuthor = $module->author_id === $user?->id;
+        $isLecturer = ($courseClass && $courseClass->dosen_id === $user?->id) || $isAuthor;
+        $isStaff = in_array($user?->role, ['super_admin', 'kajur']);
+        $isApprovedAccessible = $user && $module->status === 'approved';
+
+        if (! $isLecturer && ! $isStaff && ! $isApprovedAccessible) {
+            abort(403, 'Anda tidak memiliki hak akses ke modul ini.');
+        }
+
+        $module->load([
+            'course.department',
+            'courseClass.dosen.department',
+            'author.department',
+            'sayembara',
+            'meetings.items',
+        ]);
+
+        return view('modules.show_lms', compact('module'));
     }
 
     /**

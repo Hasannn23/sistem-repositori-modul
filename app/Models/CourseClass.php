@@ -19,10 +19,23 @@ class CourseClass extends Model
      * @var list<string>
      */
     protected $fillable = [
+        'course_id',
         'dosen_id',
         'name',
         'referral_code',
+        'academic_year',
+        'semester',
     ];
+
+    /**
+     * Get the course (mata kuliah) to which this class belongs.
+     *
+     * @return BelongsTo<Course, $this>
+     */
+    public function course(): BelongsTo
+    {
+        return $this->belongsTo(Course::class, 'course_id');
+    }
 
     /**
      * Get the dosen (lecturer) who manages this class.

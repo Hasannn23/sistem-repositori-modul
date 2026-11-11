@@ -165,7 +165,7 @@ test('navigation bar displays role-based links and removes default dashboard lin
     $dosenResponse = $this->actingAs($dosen)->get(route('classes.index'));
     $dosenResponse->assertStatus(200);
     $dosenResponse->assertSee('Kelola Kelas');
-    $dosenResponse->assertSee('Modul Praktikum');
+    $dosenResponse->assertSee('Sayembara Modul');
     $dosenResponse->assertDontSee(route('student.dashboard'));
     $dosenResponse->assertDontSee('Review Modul');
 

@@ -84,14 +84,109 @@ test('kajur can view waiting_review modules only from their department', functio
     $response->assertSee('Modul Menunggu Review TI');
     $response->assertSee('Dosen TI Budi');
     $response->assertSee('Kelas Pemrograman TI');
-    $response->assertSee('Lihat PDF');
-    $response->assertSee('Setujui (ACC)');
-    $response->assertSee('Kembalikan (Revisi)');
+    $response->assertSee('Review Modul');
 
     // Should NOT see other department module or draft module
     $response->assertDontSee('Modul Draft TI Tidak Tampil');
     $response->assertDontSee('Modul Jurusan SI Jangan Tampil');
     $response->assertDontSee('Dosen SI Cindy');
+});
+
+test('kajur can access module review page with author profile card and meetings', function () {
+    $faculty = Faculty::create(['name' => 'Fakultas Teknik']);
+    $dept = Department::create(['faculty_id' => $faculty->id, 'name' => 'Teknik Elektro']);
+
+    $kajur = User::factory()->create([
+        'role' => 'kajur',
+        'department_id' => $dept->id,
+    ]);
+
+    $dosen = User::factory()->create([
+        'name' => 'Prof. Alan Turing, Ph.D.',
+        'role' => 'dosen',
+        'department_id' => $dept->id,
+        'nidn' => '1234567890',
+    ]);
+
+    $class = CourseClass::create([
+        'dosen_id' => $dosen->id,
+        'name' => 'Praktikum Komputasi',
+        'referral_code' => 'KOMP123',
+    ]);
+
+    $module = Module::create([
+        'author_id' => $dosen->id,
+        'course_class_id' => $class->id,
+        'title' => 'Modul Teori Komputasi & Automata',
+        'storage_type' => 'lms',
+        'status' => 'waiting_review',
+        'is_locked' => true,
+    ]);
+
+    $response = $this->actingAs($kajur)->get(route('kajur.modules.review', $module));
+
+    $response->assertOk();
+    $response->assertSee('Prof. Alan Turing, Ph.D.');
+    $response->assertSee('1234567890');
+    $response->assertSee('Tetapkan Master');
+    $response->assertSee('Kembalikan/Revisi');
+    $response->assertSee('Kembali ke Antrean Pengajuan');
+});
+
+test('kajur approving module sets it as master and closes associated sayembara', function () {
+    $faculty = Faculty::create(['name' => 'Fakultas Sains']);
+    $dept = Department::create(['faculty_id' => $faculty->id, 'name' => 'Matematika']);
+
+    $kajur = User::factory()->create([
+        'role' => 'kajur',
+        'department_id' => $dept->id,
+    ]);
+
+    $dosen = User::factory()->create([
+        'role' => 'dosen',
+        'department_id' => $dept->id,
+    ]);
+
+    $course = \App\Models\Course::create([
+        'department_id' => $dept->id,
+        'code' => 'MAT-101',
+        'name' => 'Kalkulus Dasar',
+        'credit_hours' => 3,
+    ]);
+
+    $sayembara = \App\Models\Sayembara::create([
+        'department_id' => $dept->id,
+        'course_id' => $course->id,
+        'title' => 'Sayembara Modul Kalkulus',
+        'description' => 'Penyusunan draf master modul kalkulus dasar.',
+        'status' => 'open',
+        'start_date' => now()->toDateString(),
+        'end_date' => now()->addMonth()->toDateString(),
+    ]);
+
+    $module = Module::create([
+        'author_id' => $dosen->id,
+        'course_id' => $course->id,
+        'sayembara_id' => $sayembara->id,
+        'title' => 'Modul Kalkulus Integral',
+        'storage_type' => 'lms',
+        'status' => 'waiting_review',
+        'is_locked' => true,
+    ]);
+
+    $response = $this->actingAs($kajur)->post(route('kajur.modules.approve', $module));
+
+    $response->assertRedirect(route('kajur.modules.index'));
+    $response->assertSessionHas('success');
+
+    $module->refresh();
+    $sayembara->refresh();
+
+    expect($module->status)->toBe('approved');
+    expect($module->is_master)->toBeTrue();
+    expect($module->is_locked)->toBeFalse();
+    expect($module->kajur_id)->toBe($kajur->id);
+    expect($sayembara->status)->toBe('closed');
 });
 
 test('kajur can approve a module', function () {

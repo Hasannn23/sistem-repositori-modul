@@ -1,0 +1,2 @@
+@include('mahasiswa.class.show')
+

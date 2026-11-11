@@ -41,4 +41,24 @@ class Department extends Model
     {
         return $this->hasMany(User::class);
     }
+
+    /**
+     * Get the courses under this department.
+     *
+     * @return HasMany<Course, $this>
+     */
+    public function courses(): HasMany
+    {
+        return $this->hasMany(Course::class);
+    }
+
+    /**
+     * Get the sayembaras under this department.
+     *
+     * @return HasMany<Sayembara, $this>
+     */
+    public function sayembaras(): HasMany
+    {
+        return $this->hasMany(Sayembara::class);
+    }
 }

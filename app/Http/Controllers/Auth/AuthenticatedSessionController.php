@@ -28,74 +28,79 @@ class AuthenticatedSessionController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
-        // 1. Ambil input email (atau NIM) dan password dari form login
-        $credentials = $request->validate([
-            'email'    => ['required', 'string'],
+        $loginInput = $request->input('nim') ?? $request->input('email');
+
+        $request->validate([
             'password' => ['required', 'string'],
         ]);
 
-        if (Auth::attempt($credentials)) {
+        if (empty($loginInput)) {
+            throw ValidationException::withMessages([
+                'email' => 'NIM atau Email wajib diisi.',
+                'nim'   => 'NIM atau Email wajib diisi.',
+            ]);
+        }
+
+        $credentials = [
+            'nim'      => $loginInput,
+            'password' => $request->input('password'),
+        ];
+
+        // Cek login lokal terlebih dahulu (misal untuk Super Admin / Dosen / Kajur / Pengguna lokal)
+        $field = filter_var($loginInput, FILTER_VALIDATE_EMAIL) ? 'email' : 'nim';
+        if (Auth::attempt([$field => $loginInput, 'password' => $credentials['password']], $request->boolean('remember'))) {
             $request->session()->regenerate();
             return redirect()->intended(route('dashboard', absolute: false));
         }
 
         try {
-            // 2. Buat simulasi HTTP POST request ke API SIAKAD menggunakan Illuminate\Support\Facades\Http
-            // TODO: Ganti URL dengan endpoint SIAKAD asli
-            $siakadEndpoint = 'https://api.kampus.ac.id/v1/auth/login';
+            // Ambil URL dari .env (tambahkan endpoint spesifik yang dipakai di Postman, misal: /api/login)
+            // TODO: Pastikan path endpoint di bawah ini sesuai dengan URL yang diketik di Postman!
+            $endpoint = rtrim((string) env('SSO_BRIDGE_URL'), '/') . '/api/login'; 
 
-            $response = Http::timeout(10)->post($siakadEndpoint, [
-                'email'    => $credentials['email'],
+            $response = Http::timeout(env('SSO_TIMEOUT', 10))->post($endpoint, [
+                'username' => $credentials['nim'], // Sesuaikan key ini ('username' atau 'nim') dengan yang dipakai saat send di Postman
                 'password' => $credentials['password'],
             ]);
 
-            // 4. Jika API mengembalikan error (status bukan 200 / kredensial salah)
-            if (! $response->successful()) {
-                throw ValidationException::withMessages([
-                    'email' => 'Kredensial tidak cocok dengan data SIAKAD',
-                ]);
+            // Cek apakah request sukses HTTP 200 DAN status di JSON-nya adalah true
+            if ($response->successful() && $response->json('status') === true) {
+                $userData = $response->json('data');
+
+                // Cari Department ID berdasarkan nama prodi dari API
+                $department = ! empty($userData['program_studi_nama'])
+                    ? \App\Models\Department::where('name', 'LIKE', '%' . $userData['program_studi_nama'] . '%')->first()
+                    : null;
+                
+                // Simpan atau update user ke database lokal
+                $user = User::updateOrCreate(
+                    ['nim' => $userData['nim']],
+                    [
+                        'name'          => $userData['nama'],
+                        'email'         => $userData['email_kampus'] ?? $userData['email'] ?? ($userData['nim'] . '@' . env('SSO_EMAIL_FALLBACK_DOMAIN', 'sso.uinssc.ac.id')),
+                        'password'      => Hash::make(Str::random(32)), // Password asli tetap aman di SIAKAD
+                        'role'          => 'mahasiswa', // Set default mahasiswa berdasarkan jenjang S1 dari API
+                        'department_id' => $department ? $department->id : null,
+                    ]
+                );
+
+                // Lakukan login manual
+                Auth::login($user, $request->boolean('remember'));
+                $request->session()->regenerate();
+                return redirect()->intended(route('dashboard', absolute: false));
             }
-
-            // 3. Ambil data user dari respons API (misal: nama, email, role, department_id)
-            $userData = $response->json('data') ?? $response->json();
-
-            if (empty($userData)) {
-                throw ValidationException::withMessages([
-                    'email' => 'Kredensial tidak cocok dengan data SIAKAD',
-                ]);
-            }
-
-            // Gunakan User::updateOrCreate() untuk mencari user berdasarkan email.
-            // Jika belum ada, buat otomatis di database lokal (dengan password dummy karena password asli ada di SIAKAD).
-            $user = User::updateOrCreate(
-                [
-                    'email' => $userData['email'] ?? $credentials['email'],
-                ],
-                [
-                    'name'          => $userData['nama'] ?? $userData['name'] ?? $credentials['email'],
-                    'role'          => $userData['role'] ?? 'mahasiswa',
-                    'department_id' => $userData['department_id'] ?? null,
-                    'password'      => Hash::make(Str::random(32)), // Password dummy karena autentikasi dikelola SIAKAD
-                ]
-            );
-
-            // Login-kan user tersebut secara manual menggunakan Auth::login($user)
-            Auth::login($user, $request->boolean('remember'));
-
-            // Regenerasi session untuk mencegah session fixation
-            $request->session()->regenerate();
-
-            // Redirect ke route 'dashboard'
-            return redirect()->intended(route('dashboard', absolute: false));
-
         } catch (ValidationException $e) {
             throw $e;
         } catch (\Throwable $e) {
-            // Tangani error koneksi / timeout ke server SIAKAD
-            throw ValidationException::withMessages([
-                'email' => 'Kredensial tidak cocok dengan data SIAKAD',
-            ]);
+            // Abaikan error eksternal agar dilanjutkan ke pesan gagal validasi
         }
+
+        // Jika gagal (salah password / nim tidak ditemukan di SIAKAD)
+        $errorKey = $request->filled('nim') ? 'nim' : 'email';
+        throw ValidationException::withMessages([
+            $errorKey => 'NIM atau Password tidak cocok dengan data SIAKAD.',
+            'nim'     => 'NIM atau Password tidak cocok dengan data SIAKAD.',
+        ]);
     }
 
     /**

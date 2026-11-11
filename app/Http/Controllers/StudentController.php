@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\CourseClass;
+use App\Models\Module;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -19,16 +20,17 @@ class StudentController extends Controller
         /** @var User $user */
         $user = Auth::user();
 
-        // Ambil daftar kelas yang sudah diikuti mahasiswa beserta relasi dosen dan jumlah modul approved
+        // Ambil daftar kelas yang sudah diikuti mahasiswa beserta relasi dosen, jurusan, dan master modul
         $joinedClasses = $user->joinedClasses()
-            ->with('dosen')
-            ->withCount(['modules' => function ($query) {
-                $query->where('status', 'approved');
-            }])
+            ->with(['dosen.department', 'course.masterModule'])
             ->latest('course_class_user.created_at')
             ->get();
 
-        return view('mahasiswa.dashboard', compact('joinedClasses'));
+        $totalClasses = $joinedClasses->count();
+        $totalActiveModules = $joinedClasses->filter(fn($c) => $c->course?->masterModule !== null)->count();
+        $totalCredits = $joinedClasses->sum(fn($c) => $c->course?->credit_hours ?? 0);
+
+        return view('mahasiswa.dashboard', compact('joinedClasses', 'totalClasses', 'totalActiveModules', 'totalCredits'));
     }
 
     /**
@@ -92,20 +94,34 @@ class StudentController extends Controller
             abort(403, 'Anda belum terdaftar di kelas ini.');
         }
 
-        // Load relasi dosen
-        $courseClass->load('dosen');
-        $search = $request->query('search');
+        // Load relasi dosen, course, dan department
+        $courseClass->load(['dosen.department', 'course.department']);
 
-        // Tampilkan daftar Modul yang berstatus 'approved'
-        $modules = $courseClass->modules()
-            ->where('status', 'approved')
-            ->when($search, function ($query, $search) {
-                $query->where('title', 'like', "%{$search}%");
-            })
-            ->latest()
-            ->paginate(10)
-            ->withQueryString();
+        // Logika pewarisan modul: Cari Master Modul dari mata kuliah kelas ini
+        $masterModule = null;
+        if ($courseClass->course_id) {
+            $masterModule = Module::where('course_id', $courseClass->course_id)
+                ->where('is_master', true)
+                ->where('status', 'approved')
+                ->with(['meetings.items', 'author'])
+                ->first();
+        }
 
-        return view('mahasiswa.class.show', compact('courseClass', 'modules', 'search'));
+        // Fallback untuk backward-compatibility dengan modul di kelas
+        if (! $masterModule) {
+            $masterModule = $courseClass->modules()
+                ->where('is_master', true)
+                ->where('status', 'approved')
+                ->with(['meetings.items', 'author'])
+                ->first()
+                ?? $courseClass->modules()
+                    ->where('status', 'approved')
+                    ->with(['meetings.items', 'author'])
+                    ->first();
+        }
+
+        $modules = $masterModule ? collect([$masterModule]) : collect([]);
+
+        return view('mahasiswa.class.show', compact('courseClass', 'masterModule', 'modules'));
     }
 }

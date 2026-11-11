@@ -217,9 +217,9 @@
                                                         <span class="text-xs text-emerald-600">🔓 Terbuka</span>
                                                     @endif
                                                 </div>
-                                                @if ($module->status == 'revision' && $module->kajur_notes)
+                                                @if ($module->status == 'revision' && ($module->revision_note || $module->kajur_notes))
                                                     <div class="mt-1.5 p-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800">
-                                                        <strong>Catatan Kajur:</strong> {{ Str::limit($module->kajur_notes, 80) }}
+                                                        <strong>Catatan Kajur:</strong> {{ Str::limit($module->revision_note ?? $module->kajur_notes, 80) }}
                                                     </div>
                                                 @endif
                                                 <span class="text-[11px] text-gray-400 mt-1 block">{{ $module->created_at->format('d M Y, H:i') }}</span>
@@ -235,15 +235,24 @@
                                                     </button>
                                                 </form>
                                             @elseif ($module->status === 'revision')
-                                                <button
-                                                    type="button"
-                                                    x-data=""
-                                                    x-on:click.prevent="$dispatch('open-modal', 'revise-module-{{ $module->id }}')"
-                                                    class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold shadow-xs transition"
-                                                    title="Upload Perbaikan">
-                                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                                                    <span>Perbaiki</span>
-                                                </button>
+                                                @if ($module->storage_type === 'lms' || $module->sayembara_id)
+                                                    <a href="{{ route('dosen.modules.builder', $module->id) }}"
+                                                       class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold shadow-xs transition"
+                                                       title="Lanjut Edit di LMS Builder">
+                                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                                        <span>Lanjut Edit di LMS Builder</span>
+                                                    </a>
+                                                @else
+                                                    <button
+                                                        type="button"
+                                                        x-data=""
+                                                        x-on:click.prevent="$dispatch('open-modal', 'revise-module-{{ $module->id }}')"
+                                                        class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold shadow-xs transition"
+                                                        title="Upload Perbaikan">
+                                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                                        <span>Perbaiki</span>
+                                                    </button>
+                                                @endif
                                             @endif
                                             <div class="flex items-center gap-1">
                                                 <a href="{{ route('modules.show', $module->id) }}" target="_blank" class="p-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition" title="{{ $isLink ? 'Buka Link' : 'Lihat PDF' }}">
@@ -310,14 +319,14 @@
 
                                                     <!-- Catatan Revisi Kajur -->
                                                     @if ($module->status == 'revision')
-                                                        @if ($module->kajur_notes)
+                                                        @if ($module->revision_note || $module->kajur_notes)
                                                             <div class="mt-2 p-2.5 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800 flex items-start gap-2 max-w-md">
                                                                 <svg class="w-4 h-4 text-red-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
                                                                 </svg>
                                                                 <div class="min-w-0">
                                                                     <strong class="font-semibold block text-red-900">Catatan Revisi Kajur:</strong>
-                                                                    <p class="whitespace-pre-line mt-0.5 text-red-700">{{ $module->kajur_notes }}</p>
+                                                                    <p class="whitespace-pre-line mt-0.5 text-red-700">{{ $module->revision_note ?? $module->kajur_notes }}</p>
                                                                 </div>
                                                             </div>
                                                         @endif
@@ -410,18 +419,51 @@
                                                         </button>
                                                     </form>
                                                 @elseif ($module->status === 'revision')
-                                                    <!-- Tombol Perbaiki Revisi (Buka Modal) -->
-                                                    <button
-                                                        type="button"
-                                                        x-data=""
-                                                        x-on:click.prevent="$dispatch('open-modal', 'revise-module-{{ $module->id }}')"
-                                                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white text-xs font-semibold shadow-xs transition"
-                                                        title="Upload Perbaikan">
-                                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    @if ($module->storage_type === 'lms' || $module->sayembara_id)
+                                                        <a href="{{ route('dosen.modules.builder', $module->id) }}"
+                                                           class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white text-xs font-semibold shadow-xs transition"
+                                                           title="Lanjut Edit di LMS Builder">
+                                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                                            </svg>
+                                                            <span>Lanjut Edit di LMS Builder</span>
+                                                        </a>
+                                                    @else
+                                                        <!-- Tombol Perbaiki Revisi (Buka Modal) -->
+                                                        <button
+                                                            type="button"
+                                                            x-data=""
+                                                            x-on:click.prevent="$dispatch('open-modal', 'revise-module-{{ $module->id }}')"
+                                                            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white text-xs font-semibold shadow-xs transition"
+                                                            title="Upload Perbaikan">
+                                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                                            </svg>
+                                                            <span>Upload Perbaikan</span>
+                                                        </button>
+                                                    @endif
+                                                @endif
+
+                                                <!-- Buka Pembaca LMS -->
+                                                <a href="{{ route('modules.lms', $module->id) }}"
+                                                   class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-600 bg-emerald-50 text-xs font-bold text-emerald-800 hover:bg-emerald-100 transition"
+                                                   title="Buka Pembaca LMS">
+                                                    <svg class="w-3.5 h-3.5 text-emerald-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                                                    </svg>
+                                                    <span>Buka LMS</span>
+                                                </a>
+
+                                                @if (!$module->is_locked || in_array($module->status, ['draft', 'revision']))
+                                                    <!-- Buka LMS Builder -->
+                                                    <a href="{{ route('modules.builder', $module->id) }}"
+                                                       class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-purple-200 bg-purple-50 text-xs font-semibold text-purple-700 hover:bg-purple-100 transition"
+                                                       title="Susun Materi di LMS Builder">
+                                                        <svg class="w-3.5 h-3.5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
                                                         </svg>
-                                                        <span>Upload Perbaikan</span>
-                                                    </button>
+                                                        <span>Builder</span>
+                                                    </a>
                                                 @endif
 
                                                 <!-- Download / Preview PDF or Open Link -->

@@ -53,24 +53,28 @@ class CampusDataSeeder extends Seeder
             [
                 'email' => 'kajur.info@kampus.ac.id',
                 'name' => 'Kajur Informatika',
+                'nidn' => '197801012005011001',
                 'role' => 'kajur',
                 'department_name' => 'Informatika',
             ],
             [
                 'email' => 'dosen.info@kampus.ac.id',
                 'name' => 'Dosen Informatika',
+                'nidn' => '198502022010121002',
                 'role' => 'dosen',
                 'department_name' => 'Informatika',
             ],
             [
                 'email' => 'kajur.hes@kampus.ac.id',
                 'name' => 'Kajur Hukum Ekonomi Syariah',
+                'nidn' => '197503032003011003',
                 'role' => 'kajur',
                 'department_name' => 'Hukum Ekonomi Syariah',
             ],
             [
                 'email' => 'dosen.hes@kampus.ac.id',
                 'name' => 'Dosen Hukum Ekonomi Syariah',
+                'nidn' => '198804042012121004',
                 'role' => 'dosen',
                 'department_name' => 'Hukum Ekonomi Syariah',
             ],
@@ -80,10 +84,11 @@ class CampusDataSeeder extends Seeder
             $department = $departments[$user['department_name']]
                 ?? Department::where('name', $user['department_name'])->first();
 
-            User::firstOrCreate(
+            User::updateOrCreate(
                 ['email' => $user['email']],
                 [
                     'name' => $user['name'],
+                    'nidn' => $user['nidn'],
                     'password' => Hash::make('password'),
                     'role' => $user['role'],
                     'department_id' => $department?->id,

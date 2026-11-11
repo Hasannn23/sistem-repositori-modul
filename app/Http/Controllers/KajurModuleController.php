@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CourseClass;
 use App\Models\Module;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -29,11 +30,17 @@ class KajurModuleController extends Controller
         $approvedCountQuery = Module::where('status', 'approved');
 
         if ($departmentId && $user->role === 'kajur') {
-            $waitingCountQuery->whereHas('courseClass.dosen', function ($q) use ($departmentId) {
-                $q->where('department_id', $departmentId);
+            $waitingCountQuery->where(function ($q) use ($departmentId) {
+                $q->whereHas('courseClass.dosen', fn ($dq) => $dq->where('department_id', $departmentId))
+                    ->orWhereHas('course', fn ($cq) => $cq->where('department_id', $departmentId))
+                    ->orWhereHas('sayembara', fn ($sq) => $sq->where('department_id', $departmentId))
+                    ->orWhereHas('author', fn ($aq) => $aq->where('department_id', $departmentId));
             });
-            $approvedCountQuery->whereHas('courseClass.dosen', function ($q) use ($departmentId) {
-                $q->where('department_id', $departmentId);
+            $approvedCountQuery->where(function ($q) use ($departmentId) {
+                $q->whereHas('courseClass.dosen', fn ($dq) => $dq->where('department_id', $departmentId))
+                    ->orWhereHas('course', fn ($cq) => $cq->where('department_id', $departmentId))
+                    ->orWhereHas('sayembara', fn ($sq) => $sq->where('department_id', $departmentId))
+                    ->orWhereHas('author', fn ($aq) => $aq->where('department_id', $departmentId));
             });
         }
 
@@ -43,11 +50,14 @@ class KajurModuleController extends Controller
         // Query active tab
         $status = ($tab === 'approved') ? 'approved' : 'waiting_review';
         $query = Module::where('status', $status)
-            ->with(['courseClass.dosen.department']);
+            ->with(['author.department', 'course.department', 'courseClass.dosen.department', 'sayembara.course']);
 
         if ($departmentId && $user->role === 'kajur') {
-            $query->whereHas('courseClass.dosen', function ($q) use ($departmentId) {
-                $q->where('department_id', $departmentId);
+            $query->where(function ($q) use ($departmentId) {
+                $q->whereHas('courseClass.dosen', fn ($dq) => $dq->where('department_id', $departmentId))
+                    ->orWhereHas('course', fn ($cq) => $cq->where('department_id', $departmentId))
+                    ->orWhereHas('sayembara', fn ($sq) => $sq->where('department_id', $departmentId))
+                    ->orWhereHas('author', fn ($aq) => $aq->where('department_id', $departmentId));
             });
         }
 
@@ -59,6 +69,16 @@ class KajurModuleController extends Controller
                     })
                     ->orWhereHas('courseClass.dosen', function ($dq) use ($search) {
                         $dq->where('name', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('author', function ($aq) use ($search) {
+                        $aq->where('name', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('course', function ($cq) use ($search) {
+                        $cq->where('name', 'like', "%{$search}%")
+                          ->orWhere('code', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('sayembara', function ($sq) use ($search) {
+                        $sq->where('title', 'like', "%{$search}%");
                     });
             });
         }
@@ -69,7 +89,37 @@ class KajurModuleController extends Controller
     }
 
     /**
-     * Approve the module and unlock it for public access.
+     * Display the full LMS Reader reviewer view for Kajur.
+     */
+    public function review(Module $module): View
+    {
+        $user = Auth::user();
+        if (!in_array($user->role, ['kajur', 'super_admin'])) {
+            abort(403, 'Akses terbatas untuk Kepala Jurusan.');
+        }
+
+        // Check department boundary if user has a department assigned
+        $moduleDepartmentId = $module->courseClass?->dosen?->department_id
+            ?? $module->course?->department_id
+            ?? $module->sayembara?->department_id
+            ?? $module->author?->department_id;
+        if ($user->role === 'kajur' && $user->department_id && $moduleDepartmentId && $moduleDepartmentId !== $user->department_id) {
+            abort(403, 'Anda tidak memiliki hak akses untuk mereview modul jurusan lain.');
+        }
+
+        $module->load([
+            'author.department',
+            'meetings.items',
+            'sayembara.course',
+            'course.department',
+            'courseClass.dosen',
+        ]);
+
+        return view('kajur.modules.review', compact('module'));
+    }
+
+    /**
+     * Approve the module, mark as master module, and close associated sayembara.
      */
     public function approve(Module $module): RedirectResponse
     {
@@ -79,18 +129,84 @@ class KajurModuleController extends Controller
         }
 
         // Check department boundary if user has a department assigned
-        $moduleDepartmentId = $module->courseClass?->dosen?->department_id;
-        if ($user->role === 'kajur' && $user->department_id && $moduleDepartmentId !== $user->department_id) {
+        $moduleDepartmentId = $module->courseClass?->dosen?->department_id
+            ?? $module->course?->department_id
+            ?? $module->sayembara?->department_id
+            ?? $module->author?->department_id;
+        if ($user->role === 'kajur' && $user->department_id && $moduleDepartmentId && $moduleDepartmentId !== $user->department_id) {
             abort(403, 'Anda tidak memiliki hak akses untuk menyetujui modul jurusan lain.');
         }
 
+        if ($module->sayembara && $module->sayembara->status === 'closed' && ! $module->is_master) {
+            return redirect()->back()->with('error', 'Sayembara untuk modul ini sudah ditutup dan pemenang Master Modul telah ditetapkan.');
+        }
+
+        // Course determination
+        $courseId = $module->course_id ?? $module->sayembara?->course_id ?? $module->courseClass?->course_id;
+
+        if ($courseId) {
+            // Reset any existing master module for this course
+            Module::where('course_id', $courseId)
+                ->where('id', '!=', $module->id)
+                ->where('is_master', true)
+                ->update(['is_master' => false]);
+        }
+
         $module->status = 'approved';
+        $module->is_master = true;
         $module->is_locked = false;
         $module->kajur_notes = null;
+        $module->revision_note = null;
         $module->kajur_id = $user->id;
+        if ($courseId && !$module->course_id) {
+            $module->course_id = $courseId;
+        }
         $module->save();
 
-        return redirect()->back()->with('success', "Modul \"{$module->title}\" berhasil disetujui (ACC) dan dapat diakses publik.");
+        // 3. Tutup sayembara terkait jika modul terikat sayembara
+        if ($module->sayembara) {
+            $module->sayembara->update([
+                'status' => 'closed',
+            ]);
+        }
+
+        // 4. Propagasi modul master ke seluruh kelas dari mata kuliah terkait
+        if ($courseId) {
+            $classes = CourseClass::where('course_id', $courseId)->get();
+            foreach ($classes as $class) {
+                $alreadyHas = Module::where('course_class_id', $class->id)
+                    ->where(function ($q) use ($module) {
+                        $q->where('id', $module->id)
+                            ->orWhere('title', $module->title);
+                    })
+                    ->exists();
+
+                if (! $alreadyHas) {
+                    $clonedModule = $module->replicate(['course_class_id']);
+                    $clonedModule->course_class_id = $class->id;
+                    $clonedModule->is_master = true;
+                    $clonedModule->status = 'approved';
+                    $clonedModule->is_locked = false;
+                    $clonedModule->save();
+
+                    // Duplikasi pertemuan dan materi jika ada
+                    foreach ($module->meetings as $meeting) {
+                        $clonedMeeting = $meeting->replicate(['module_id']);
+                        $clonedMeeting->module_id = $clonedModule->id;
+                        $clonedMeeting->save();
+
+                        foreach ($meeting->items as $item) {
+                            $clonedItem = $item->replicate(['module_meeting_id']);
+                            $clonedItem->module_meeting_id = $clonedMeeting->id;
+                            $clonedItem->save();
+                        }
+                    }
+                }
+            }
+        }
+
+        return redirect()->route('kajur.modules.index')
+            ->with('success', "Modul \"{$module->title}\" resmi disetujui (ACC) sebagai Master Modul dan sayembara telah ditutup.");
     }
 
     /**
@@ -104,23 +220,39 @@ class KajurModuleController extends Controller
         }
 
         // Check department boundary if user has a department assigned
-        $moduleDepartmentId = $module->courseClass?->dosen?->department_id;
-        if ($user->role === 'kajur' && $user->department_id && $moduleDepartmentId !== $user->department_id) {
+        $moduleDepartmentId = $module->courseClass?->dosen?->department_id
+            ?? $module->course?->department_id
+            ?? $module->sayembara?->department_id
+            ?? $module->author?->department_id;
+        if ($user->role === 'kajur' && $user->department_id && $moduleDepartmentId && $moduleDepartmentId !== $user->department_id) {
             abort(403, 'Anda tidak memiliki hak akses untuk merevisi modul jurusan lain.');
         }
 
-        $validated = $request->validate([
-            'kajur_notes' => ['required', 'string', 'max:2000'],
-        ], [
-            'kajur_notes.required' => 'Catatan revisi wajib diisi agar dosen dapat memperbaiki modul.',
-            'kajur_notes.max' => 'Catatan revisi maksimal 2000 karakter.',
-        ]);
+        $note = $request->input('revision_note') ?? $request->input('kajur_notes');
+
+        if (empty(trim((string) $note))) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'revision_note' => 'Catatan revisi wajib diisi agar dosen dapat memperbaiki modul.',
+                'kajur_notes' => 'Catatan revisi wajib diisi agar dosen dapat memperbaiki modul.',
+            ]);
+        }
+
+        if (mb_strlen((string) $note) > 2000) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'revision_note' => 'Catatan revisi maksimal 2000 karakter.',
+                'kajur_notes' => 'Catatan revisi maksimal 2000 karakter.',
+            ]);
+        }
 
         $module->status = 'revision';
-        $module->kajur_notes = $validated['kajur_notes'];
+        $module->is_locked = false;
+        $module->revision_note = $note;
+        $module->kajur_notes = $note;
         $module->kajur_id = $user->id;
         $module->save();
 
-        return redirect()->back()->with('success', "Modul \"{$module->title}\" berhasil dikembalikan dengan catatan revisi.");
+        return redirect()->route('kajur.modules.index')
+            ->with('success', "Modul \"{$module->title}\" berhasil dikembalikan dengan catatan revisi.");
     }
 }
+

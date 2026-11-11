@@ -27,6 +27,8 @@ class User extends Authenticatable
         'department_id',
         'name',
         'email',
+        'nim',
+        'nidn',
         'password',
         'role',
     ];
@@ -68,6 +70,16 @@ class User extends Authenticatable
     public function courseClasses(): HasMany
     {
         return $this->hasMany(CourseClass::class, 'dosen_id');
+    }
+
+    /**
+     * Get the modules authored/submitted by this user (dosen).
+     *
+     * @return HasMany<Module, $this>
+     */
+    public function modules(): HasMany
+    {
+        return $this->hasMany(Module::class, 'author_id');
     }
 
     /**
